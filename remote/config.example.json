@@ -1,0 +1,5 @@
+{
+  "agent_dock_url": "http://127.0.0.1:17321/api/events",
+  "server": "compute01",
+  "agent_type": "claude-code"
+}
