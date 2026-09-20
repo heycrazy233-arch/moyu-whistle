@@ -58,6 +58,14 @@ pip install -r requirements.txt
 python3 desktop/launcher.py
 ```
 
+## Test
+
+Run the offline smoke tests:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
 ## API
 
 Health:
