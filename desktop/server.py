@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 from database import AgentStore
 from state import AgentEvent, AgentStatus
+from settings import Settings, Monitor, in_window
 
 
 DEFAULT_HOST = "127.0.0.1"
@@ -56,7 +57,28 @@ def handle_collector(store, payload):
 
 
 def create_store(db_path: str | Path | None = None) -> AgentStore:
-    return AgentStore(Path(db_path) if db_path else DEFAULT_DB)
+    store = AgentStore(Path(db_path) if db_path else DEFAULT_DB)
+    store.settings = Settings(store.db_path.with_suffix(".settings.json"))
+    store.monitor = None
+    return store
+
+
+def settings_view(store):
+    return {"settings": store.settings.get(), "monitor": store.monitor.status() if store.monitor else {"active": False, "sources": {}, "timezone": "", "running": False}}
+
+
+def dashboard_agents(store):
+    config = store.settings.get()
+    sources = store.monitor.status()["sources"] if store.monitor else {}
+    rows = store.list_agents()
+    for row in rows:
+        source = row["server"]
+        profiles = {"ssh:" + p["name"]: p for p in config["servers"]}
+        paused = not in_window(config) or (source.startswith("ssh:") and not profiles.get(source, {}).get("enabled"))
+        row["collection_paused"] = paused
+        if "received_at" in row:
+            row["collector_online"] = not paused and sources.get(source, {}).get("state") != "error" and time.time() - row["received_at"] < max(30, config["interval"] * 3 + 15)
+    return rows
 
 
 def handle_event(store: AgentStore, payload: dict[str, Any]) -> dict[str, Any]:
@@ -77,6 +99,15 @@ def create_fastapi_app(store: AgentStore):
         return None
 
     app = FastAPI(title="Agent Dock", version="0.1.0")
+
+    @app.middleware("http")
+    async def local_requests(request, call_next):
+        from fastapi.responses import JSONResponse
+        host = request.headers.get("host", "")
+        origin = request.headers.get("origin")
+        if urlparse("http://" + host).hostname not in ("127.0.0.1", "localhost", "::1") or (origin and origin != "http://" + host):
+            return JSONResponse({"error": "Local same-origin access only"}, status_code=403)
+        return await call_next(request)
     app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
 
     @app.get("/", include_in_schema=False)
@@ -89,7 +120,19 @@ def create_fastapi_app(store: AgentStore):
 
     @app.get("/api/agents")
     def agents() -> list[dict[str, Any]]:
-        return store.list_agents()
+        return dashboard_agents(store)
+
+    @app.get("/api/settings")
+    def settings_get():
+        return settings_view(store)
+
+    @app.post("/api/settings")
+    def settings_post(payload: dict[str, Any]):
+        try:
+            store.settings.save(payload)
+            return settings_view(store)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/events")
     def events(limit: int = 50) -> list[dict[str, Any]]:
@@ -142,6 +185,8 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:
+        if not self._local_request():
+            return
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
             self._send_file(WEB_DIR / "index.html")
@@ -153,7 +198,10 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "service": "agent-dock", "version": "0.1.0"})
             return
         if parsed.path == "/api/agents":
-            self._send_json(200, self.store.list_agents())
+            self._send_json(200, dashboard_agents(self.store))
+            return
+        if parsed.path == "/api/settings":
+            self._send_json(200, settings_view(self.store))
             return
         if parsed.path == "/api/events":
             limit = int(parse_qs(parsed.query).get("limit", ["50"])[0])
@@ -162,18 +210,36 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:
+        if not self._local_request():
+            return
         route = urlparse(self.path).path
-        if route not in {"/api/events", "/api/collectors"}:
+        if route not in {"/api/events", "/api/collectors", "/api/settings"}:
             self._send_json(404, {"error": "Not found"})
             return
-        length = int(self.headers.get("Content-Length") or "0")
         try:
+            if self.headers.get_content_type() != "application/json":
+                raise ValueError("JSON content type required")
+            length = int(self.headers.get("Content-Length") or "0")
+            if not 0 < length <= 1_000_000:
+                raise ValueError("Invalid request size")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            result = handle_collector(self.store, payload) if route == "/api/collectors" else handle_event(self.store, payload)
+            if route == "/api/settings":
+                self.store.settings.save(payload)
+                result = settings_view(self.store)
+            else:
+                result = handle_collector(self.store, payload) if route == "/api/collectors" else handle_event(self.store, payload)
         except (json.JSONDecodeError, ApiError, ValueError) as exc:
             self._send_json(400, {"error": str(exc)})
             return
         self._send_json(200, result)
+
+    def _local_request(self):
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin")
+        if urlparse("http://" + host).hostname not in ("localhost", "127.0.0.1", "::1") or (origin and origin != "http://" + host):
+            self._send_json(403, {"error": "Local same-origin access only"})
+            return False
+        return True
 
 
 def run_stdlib_server(store: AgentStore, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
@@ -209,16 +275,13 @@ def main() -> None:
                               os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")),
                               socket.gethostname())
 
-        def collect():
-            while True:
-                try:
-                    handle_collector(store, {"server": collector.server, "agents": collector.scan()})
-                except Exception as exc:
-                    print(f"Local collector failed: {type(exc).__name__}", flush=True)
-                time.sleep(3)
-
-        threading.Thread(target=collect, daemon=True).start()
-    run_server(store, args.host, args.port)
+        store.monitor = Monitor(store.settings, collector, store, handle_collector)
+        store.monitor.start()
+    try:
+        run_server(store, args.host, args.port)
+    finally:
+        if store.monitor:
+            store.monitor.stop.set()
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import subprocess
 import time
 from datetime import datetime
@@ -153,12 +154,49 @@ class LogReader:
 
 
 class Collector:
-    def __init__(self, codex_home, claude_home, server, recent_seconds=3600):
+    def __init__(self, codex_home, claude_home, server, recent_seconds=3600, metadata_only=False):
         self.codex_home, self.claude_home = Path(codex_home), Path(claude_home)
         self.server, self.recent_seconds = server, recent_seconds
         self.reader = LogReader()
+        self.metadata_only = metadata_only
+
+    def minimal_scan(self):
+        agents = []
+        opened = open_codex_sessions(self.codex_home)
+        sources = {}
+        databases = sorted(self.codex_home.glob("state_*.sqlite"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if databases and opened:
+            try:
+                with sqlite3.connect(databases[0].resolve().as_uri() + "?mode=ro", uri=True) as conn:
+                    marks = ",".join("?" for _ in opened)
+                    sources = dict(conn.execute(f"SELECT id, source FROM threads WHERE id IN ({marks})", list(opened)))
+            except sqlite3.Error:
+                pass
+        cli = {pid: is_cli(pid) for pid in set(opened.values())}
+        for sid, pid in opened.items():
+            if sources.get(sid) not in ("cli", "vscode", "app-server") and not cli.get(pid):
+                continue
+            agents.append(dict(session_id=sid, agent_type="codex", event="idle", status_known=False,
+                               message="Open; task status unavailable in metadata-only mode",
+                               last_activity=0, evidence="session metadata", presence="open"))
+        for path in (self.claude_home / "sessions").glob("*.json"):
+            data = json_file(path)
+            if not process_alive(data.get("pid")) or not data.get("sessionId"):
+                continue
+            state = {"working": "working", "running": "working", "busy": "working", "waiting": "waiting",
+                     "idle": "idle", "error": "error", "done": "done"}.get(data.get("status"))
+            agents.append(dict(session_id=data["sessionId"], agent_type="claude-code", event=state or "idle",
+                               status_known=state is not None, message=state or "Status unknown",
+                               last_activity=float(data.get("statusUpdatedAt", 0)) / 1000,
+                               evidence="session status", presence="open"))
+        for row in agents:
+            row.update(server=self.server, project=row["agent_type"], cwd="",
+                       agent_key=f"{self.server}:{row['agent_type']}:{row['session_id']}")
+        return agents
 
     def scan(self):
+        if self.metadata_only:
+            return self.minimal_scan()
         agents = []
         opened = open_codex_sessions(self.codex_home)
         cli_sessions = {sid for sid, pid in opened.items() if is_cli(pid)}
@@ -227,8 +265,13 @@ def main():
     parser.add_argument("--claude-home", default=os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
     parser.add_argument("--interval", type=float, default=3)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--snapshot", action="store_true", help="Print one JSON snapshot for SSH polling; do not POST")
+    parser.add_argument("--metadata-only", action="store_true", help="Do not read conversation logs or send project paths")
     args = parser.parse_args()
-    collector = Collector(args.codex_home, args.claude_home, args.server)
+    collector = Collector(args.codex_home, args.claude_home, args.server, metadata_only=args.metadata_only)
+    if args.snapshot:
+        print(json.dumps(collector.scan()))
+        return
     while True:
         try:
             agents = collector.scan()

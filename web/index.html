@@ -23,6 +23,27 @@
         </div>
       </header>
 
+      <details id="settings-panel">
+        <summary>设置 · 采集与 SSH</summary>
+        <form id="settings-form">
+          <div class="settings-grid">
+            <label><input type="checkbox" id="monitor-enabled"> 启用自动采集</label>
+            <label>采集间隔（秒）<input type="number" id="monitor-interval" min="5" max="3600" required></label>
+            <label><input type="checkbox" id="monitor-scheduled"> 限定每日工作时段</label>
+            <label>开始时间<input type="time" id="monitor-start" required></label>
+            <label>结束时间<input type="time" id="monitor-end" required></label>
+            <label><input type="checkbox" id="monitor-logs"> 允许读取 Codex 会话日志（兼容模式）</label>
+          </div>
+          <p class="settings-note">默认仅采集状态元数据，Codex 的任务状态可能为 Unknown。兼容模式会接触对话日志。时段按本机时区计算，支持跨午夜；取消时段限制即全天采集。</p>
+          <h3>SSH 服务器</h3>
+          <p class="settings-note">远端需已部署新版 remote/collector.py，具备 Python 3；SSH 使用已有密钥与主机信任配置，不保存密码。端口为 SSH 登录端口。</p>
+          <div id="ssh-servers"></div>
+          <div class="settings-actions"><button type="button" id="add-server">添加服务器</button><button type="submit">保存设置</button></div>
+          <p id="settings-result" role="status"></p>
+        </form>
+        <div id="monitor-status" aria-live="polite"></div>
+      </details>
+
       <section class="overview" aria-label="Agent overview">
         <div class="headline">
           <p class="eyebrow">AGENT ACTIVITY</p>
@@ -43,6 +64,7 @@
             <button class="filter" type="button" data-filter="idle">Idle</button>
             <button class="filter" type="button" data-filter="unknown">Unknown</button>
             <button class="filter" type="button" data-filter="offline">Offline</button>
+            <button class="filter" type="button" data-filter="paused">Paused</button>
           </div>
           <button class="refresh" id="refresh" type="button" title="Refresh now" aria-label="Refresh now">
             <span aria-hidden="true">↻</span>
@@ -59,5 +81,6 @@
       </div>
     </template>
     <script src="/assets/app.js"></script>
+    <script src="/assets/settings.js"></script>
   </body>
 </html>

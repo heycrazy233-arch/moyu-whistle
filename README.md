@@ -10,6 +10,9 @@ Remote collectors can connect through an SSH reverse tunnel. See
 
 Start with `python3 desktop/server.py --collect` (Windows: `py desktop/server.py --collect`).
 Open http://127.0.0.1:17321/. This path requires only Python, not desktop dependencies.
+The dashboard's settings section controls polling intervals, daily time windows,
+and multiple SSH sources with custom ports. Metadata-only collection is the default;
+Codex task states need an explicit opt-in to the compatibility log reader.
 
 ## What Works Now
 

@@ -14,6 +14,7 @@
   --idle: #8c96a3;
   --unknown: #8c96a3;
   --offline: #8c96a3;
+  --paused: #8c96a3;
 }
 
 * { box-sizing: border-box; }
@@ -105,3 +106,14 @@ h2 { max-width: 680px; margin: 8px 0 10px; font-size: clamp(28px, 4vw, 44px); li
 .agent-meta { flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
 .agent-name, .agent-message { white-space: normal; overflow-wrap: anywhere; }
 .status { flex-shrink: 0; }
+
+#settings-panel { margin-top: 20px; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+#settings-panel summary { cursor: pointer; font-size: 15px; }
+#settings-form { margin-top: 20px; }
+.settings-grid, .ssh-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+#settings-form label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+#settings-form input:not([type=checkbox]) { width: 100%; padding: 9px; background: #111; color: #fff; border: 1px solid #666; border-radius: 4px; font: inherit; }
+.settings-note, #monitor-status { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; line-height: 1.6; }
+.ssh-row { margin: 12px 0; padding: 16px; border: 1px solid var(--line); }
+.settings-actions { display: flex; gap: 12px; }
+#settings-form button { padding: 8px 12px; background: #243e37; color: white; border: 1px solid #638b7e; border-radius: 4px; cursor: pointer; }

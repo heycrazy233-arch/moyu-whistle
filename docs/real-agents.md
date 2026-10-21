@@ -1,5 +1,55 @@
 # Real agent connections
 
+## Browser settings
+
+Open **设置 · 采集与 SSH** on the dashboard. Save applies to the running
+`desktop/server.py --collect` service. Preferences are local, beside the database
+as `work/agent-dock.settings.json` (ignored by Git).
+
+- Automatic collection toggle; interval 5–3600 seconds, default 15.
+- Optional daily time window using the dashboard computer's system timezone;
+  start inclusive, end exclusive, overnight windows supported. Uncheck for all day.
+- Up to eight independently enabled SSH profiles: unique name, host/SSH alias,
+  login port (e.g. 2222), and installed remote Python script path.
+- Metadata-only is the default. Codex writer locks and read-only session ID/source
+  metadata identify open sessions; no transcript files or project paths are read.
+  Task states remain Unknown for Codex in this mode. Claude session status is read.
+  Windows lacks writer-lock discovery, so metadata-only Codex discovery is not yet supported.
+  The explicit compatibility checkbox re-enables the older log adapter described below.
+
+Managed SSH profiles **pull snapshots through authenticated SSH**, so they require
+no reverse forwarding or remote HTTP listener. Run once from your terminal to
+establish normal host trust and key authentication, then copy the current script:
+
+```sh
+ssh -p 2222 user@your-server
+scp -P 2222 remote/collector.py user@your-server:agent-dock-collector.py
+```
+
+Set the profile host to `user@your-server`, port to `2222`, script to
+`agent-dock-collector.py`, enable it and save. Use the account that owns the agents.
+The remote host currently must have a POSIX shell and Python 3.9+.
+BatchMode forbids password prompts; StrictHostKeyChecking stays enabled.
+Each poll launches one SSH call and a one-shot collector, bounded by a 12-second
+timeout. Each source has a separate worker and cannot overlap its own polls.
+The next poll occurs one interval after the prior one completes. On slow links
+choose 30–60 seconds to reduce SSH setup overhead. No automatic uploads occur.
+
+Paused schedules stop new polls; an already running poll may finish within its
+timeout, but its result is discarded after settings or schedule changes. Disabled
+or removed profiles are not polled; their retained snapshots display Paused.
+The browser refreshes stored snapshots every two seconds, independently of polling.
+The settings pane shows source errors and latest wall-clock collection duration.
+It never displays SSH stderr, which may contain private system information.
+
+Settings API rejects foreign origins and Host headers. Keep the server bound to
+loopback. Remote profiles execute only the installed collector path with validated
+arguments; no password/key contents are stored in the settings.
+
+The manual reverse-tunnel workflow below remains available but is separately
+managed: the web schedule does not control collectors you launch yourself.
+Do not use manual and managed collection for the same server simultaneously.
+
 ## Local Mac, Windows or Linux
 
 From the repository, start the dashboard and collector together:

@@ -1,11 +1,12 @@
-const STATUS = ["working", "waiting", "error", "done", "idle", "unknown", "offline"];
-const LABELS = { idle: "Idle", working: "Working", waiting: "Waiting", error: "Error", done: "Done", unknown: "Unknown", offline: "Offline" };
+const STATUS = ["working", "waiting", "error", "done", "idle", "unknown", "offline", "paused"];
+const LABELS = { idle: "Idle", working: "Working", waiting: "Waiting", error: "Error", done: "Done", unknown: "Unknown", offline: "Offline", paused: "Paused" };
 
 let agents = [];
 let activeFilter = "all";
 let refreshing = false;
 
 function displayStatus(agent) {
+  if (agent.collection_paused) return "paused";
   if (agent.collector_online === false) return "offline";
   if (agent.status_known === false) return "unknown";
   return agent.event;
@@ -63,7 +64,7 @@ function renderAgents() {
           <span>${escapeHtml(agent.agent_type)}</span>
           <span>${escapeHtml(agent.tmux_session || "no tmux")}</span>
         </div>
-        <span class="status">${observed === "offline" ? "Offline" : observed === "unknown" ? "Unknown" : LABELS[status]}</span>
+        <span class="status">${observed === "paused" ? "Paused" : observed === "offline" ? "Offline" : observed === "unknown" ? "Unknown" : LABELS[status]}</span>
       </article>`;
   }).join("");
 }
