@@ -11,7 +11,7 @@ import threading
 import time
 
 
-DEFAULT = {"enabled": True, "interval": 15, "scheduled": False,
+DEFAULT = {"enabled": True, "interval": 5, "scheduled": False,
            "start": "09:00", "end": "18:00", "allow_logs": False, "servers": []}
 
 
@@ -92,9 +92,41 @@ def ssh_command(profile, allow_logs):
     remote = ["python3", profile["script"], "--snapshot", "--server", profile["name"]]
     if not allow_logs:
         remote.append("--metadata-only")
+    else:
+        remote.append("--allow-logs")
     return ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
             "-o", "ConnectTimeout=5", "-o", "ConnectionAttempts=1", "-p", str(profile["port"]),
             profile["host"], " ".join(shlex.quote(part) for part in remote)]
+
+
+def read_snapshot(command, timeout=12, limit=1_000_000):
+    """Bound memory while reading an untrusted remote process; always reap it."""
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                          stdin=subprocess.DEVNULL) as process:
+        expired = threading.Event()
+        def expire():
+            expired.set()
+            process.kill()
+        timer = threading.Timer(timeout, expire)
+        timer.daemon = True
+        timer.start()
+        try:
+            data = process.stdout.read(limit + 1)
+            if len(data) > limit:
+                raise ValueError("Remote response too large")
+            code = process.wait()
+            if expired.is_set() or code:
+                raise ValueError("Remote process failed or timed out")
+            return json.loads(data)
+        finally:
+            timer.cancel()
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+
+def retry_delay(interval, failures):
+    return max(interval, min(300, interval * 2 ** min(failures, 6)))
 
 
 class Monitor:
@@ -119,7 +151,7 @@ class Monitor:
         return {"active": in_window(config), "timezone": datetime.now().astimezone().tzname(), "sources": states}
 
     def worker(self, slot):
-        due, previous = 0, None
+        due, previous, failures = 0, None, 0
         while not self.stop.wait(1):
             config = self.settings.get()
             profile = config["servers"][slot] if slot >= 0 and slot < len(config["servers"]) else None
@@ -128,7 +160,7 @@ class Monitor:
             name = self.collector.server if slot == -1 else "ssh:" + profile["name"]
             signature = (config["interval"], config["allow_logs"], config["enabled"], config["scheduled"], config["start"], config["end"], str(profile))
             if signature != previous:
-                due, previous = 0, signature
+                due, previous, failures = 0, signature, 0
             if not in_window(config) or (profile and not profile["enabled"]):
                 with self.guard:
                     self.states[name] = {"state": "paused"}
@@ -139,13 +171,7 @@ class Monitor:
             began = time.monotonic()
             try:
                 if profile:
-                    result = subprocess.run(ssh_command(profile, config["allow_logs"]), capture_output=True,
-                                            text=True, timeout=12)
-                    if result.returncode:
-                        raise ValueError("SSH failed: check host trust, key authentication and collector path")
-                    if len(result.stdout) > 1_000_000:
-                        raise ValueError("Remote response too large")
-                    agents = json.loads(result.stdout)
+                    agents = read_snapshot(ssh_command(profile, config["allow_logs"]))
                 else:
                     self.collector.metadata_only = not config["allow_logs"]
                     agents = self.collector.scan()
@@ -153,10 +179,13 @@ class Monitor:
                 if self.settings.get() != config or not in_window(config):
                     continue
                 self.ingest(self.store, {"server": name, "agents": agents})
+                failures = 0
                 state = {"state": "online", "duration_ms": round((time.monotonic() - began) * 1000),
                          "last_checked": time.time(), "count": len(agents)}
             except Exception as exc:
+                failures += 1
                 state = {"state": "error", "error": "SSH authentication, host trust, collector version or network error" if profile else type(exc).__name__}
+                state["retry_seconds"] = retry_delay(config["interval"], failures)
             with self.guard:
                 self.states[name] = state
-            due = time.monotonic() + config["interval"]
+            due = time.monotonic() + retry_delay(config["interval"], failures)

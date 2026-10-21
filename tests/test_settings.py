@@ -10,12 +10,44 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'desktop'))
 sys.path.insert(0, str(ROOT / 'remote'))
-from settings import DEFAULT, Settings, validate, in_window, ssh_command, Monitor
-from collector import Collector
+from settings import DEFAULT, Settings, validate, in_window, ssh_command, Monitor, read_snapshot, retry_delay
+from collector import Collector, json_file
 from server import create_store, dashboard_agents, handle_collector
 
 
 class SettingsTests(unittest.TestCase):
+    def test_default_and_backoff(self):
+        self.assertEqual(DEFAULT['interval'], 5)
+        self.assertEqual([retry_delay(5, n) for n in range(8)], [5,10,20,40,80,160,300,300])
+        self.assertEqual(retry_delay(3600, 5), 3600)
+
+    def test_bounded_subprocess(self):
+        self.assertEqual(read_snapshot([sys.executable, '-c', 'print("[]")']), [])
+        with self.assertRaises(ValueError):
+            read_snapshot([sys.executable, '-c', 'print("x" * 2000)'], limit=1000)
+        with self.assertRaises(ValueError):
+            read_snapshot([sys.executable, '-c', 'import time; time.sleep(10)'], timeout=0.1)
+        with self.assertRaises(ValueError):
+            read_snapshot([sys.executable, '-c', 'raise SystemExit(1)'])
+
+    def test_metadata_file_bounds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'status.json'
+            for content in ['[]', 'invalid', ' ' * 65537]:
+                path.write_text(content)
+                self.assertEqual(json_file(path), {})
+            path.write_text('{"status":"idle"}')
+            self.assertEqual(json_file(path), {'status':'idle'})
+
+    def test_database_connections_close(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as tmp:
+            store = create_store(Path(tmp)/'state.db')
+            with store._connect() as conn:
+                conn.execute('SELECT 1')
+            with self.assertRaises(sqlite3.ProgrammingError):
+                conn.execute('SELECT 1')
+
     def test_windows_and_midnight(self):
         value = dict(DEFAULT, scheduled=True)
         for hour, minute, active in [(8,59,False),(9,0,True),(17,59,True),(18,0,False)]:
@@ -87,7 +119,7 @@ class SettingsTests(unittest.TestCase):
             monitor = Monitor(settings, Mock(server='local'), store, ingest)
             monitor.stop = Mock()
             monitor.stop.wait.side_effect = [False, True]
-            with patch('settings.subprocess.run', return_value=Mock(returncode=0,stdout='[]')) as run:
+            with patch('settings.read_snapshot', return_value=[]) as run:
                 monitor.worker(0)
                 self.assertIn('2222', run.call_args.args[0])
                 self.assertIn('--metadata-only', run.call_args.args[0][-1])

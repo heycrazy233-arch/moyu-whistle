@@ -6,7 +6,7 @@ Open **设置 · 采集与 SSH** on the dashboard. Save applies to the running
 `desktop/server.py --collect` service. Preferences are local, beside the database
 as `work/agent-dock.settings.json` (ignored by Git).
 
-- Automatic collection toggle; interval 5–3600 seconds, default 15.
+- Automatic collection toggle; interval 5–3600 seconds, default 5.
 - Optional daily time window using the dashboard computer's system timezone;
   start inclusive, end exclusive, overnight windows supported. Uncheck for all day.
 - Up to eight independently enabled SSH profiles: unique name, host/SSH alias,
@@ -15,7 +15,7 @@ as `work/agent-dock.settings.json` (ignored by Git).
   metadata identify open sessions; no transcript files or project paths are read.
   Task states remain Unknown for Codex in this mode. Claude session status is read.
   Windows lacks writer-lock discovery, so metadata-only Codex discovery is not yet supported.
-  The explicit compatibility checkbox re-enables the older log adapter described below.
+The explicit compatibility checkbox re-enables the older log adapter described below.
 
 Managed SSH profiles **pull snapshots through authenticated SSH**, so they require
 no reverse forwarding or remote HTTP listener. Run once from your terminal to
@@ -34,6 +34,12 @@ Each poll launches one SSH call and a one-shot collector, bounded by a 12-second
 timeout. Each source has a separate worker and cannot overlap its own polls.
 The next poll occurs one interval after the prior one completes. On slow links
 choose 30–60 seconds to reduce SSH setup overhead. No automatic uploads occur.
+Failed polls back off exponentially (10, 20, 40 seconds at the default interval),
+up to 300 seconds or the configured interval if longer. Success or changed
+settings reset backoff. SSH output is capped at 1 MB while reading, stderr is
+discarded, and timed-out/oversized processes are killed and reaped. Local status
+JSON files are capped at 64 KiB. SQLite connections are explicitly closed after
+each operation; metadata queries have a 0.5-second lock timeout.
 
 Paused schedules stop new polls; an already running poll may finish within its
 timeout, but its result is discarded after settings or schedule changes. Disabled
@@ -61,7 +67,7 @@ python3 desktop/server.py --collect
 On Windows use `py desktop/server.py --collect`. Open http://127.0.0.1:17321/.
 No PySide6, FastAPI or extra Python packages are required for this mode.
 
-The collector observes Codex logs under `CODEX_HOME` (default `~/.codex`)
+Only with explicit `--allow-logs`, the collector observes Codex logs under `CODEX_HOME` (default `~/.codex`)
 and Claude session status files under `CLAUDE_CONFIG_DIR` (default `~/.claude`).
 It reports existing sessions without restarting the agents or changing their settings.
 Only identifiers, directories, timestamps and status metadata go to the dashboard.
@@ -126,3 +132,15 @@ This is a current-status integration, not an event-history recorder. Collector
 heartbeats update SQLite snapshots, not the old manual `/api/events` history.
 The SSH command and collector HTTP protocol are locally tested; a real remote
 server and a Windows machine have not yet been tested.
+
+## Resource verification
+
+Local macOS measurement on 2026-10-21, metadata-only, six scans spaced five
+seconds apart: 7 sessions, 76-117 ms wall time per scan, 0.594 CPU seconds
+including child processes over 30 seconds (about 2% of one CPU core).
+This is a short collector sample, not a full-service memory/leak soak test or
+a Windows/SSH benchmark. SSH still opens a new connection per successful poll.
+The CI matrix covers Python 3.11/3.13 on macOS, Windows and Linux; unit tests
+cannot establish compatibility with every installed agent version.
+Standalone collectors now also default to metadata-only; update remote scripts
+before enabling the optional legacy log mode with `--allow-logs`.

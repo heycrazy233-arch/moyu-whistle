@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,12 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 def json_file(path):
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        with path.open("rb") as stream:
+            content = stream.read(65537)
+        if len(content) > 65536:
+            return {}
+        value = json.loads(content)
+        return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
 
@@ -167,7 +173,7 @@ class Collector:
         databases = sorted(self.codex_home.glob("state_*.sqlite"), key=lambda p: p.stat().st_mtime, reverse=True)
         if databases and opened:
             try:
-                with sqlite3.connect(databases[0].resolve().as_uri() + "?mode=ro", uri=True) as conn:
+                with closing(sqlite3.connect(databases[0].resolve().as_uri() + "?mode=ro", uri=True, timeout=0.5)) as conn:
                     marks = ",".join("?" for _ in opened)
                     sources = dict(conn.execute(f"SELECT id, source FROM threads WHERE id IN ({marks})", list(opened)))
             except sqlite3.Error:
@@ -263,10 +269,12 @@ def main():
     parser.add_argument("--server", default=socket.gethostname())
     parser.add_argument("--codex-home", default=os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
     parser.add_argument("--claude-home", default=os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
-    parser.add_argument("--interval", type=float, default=3)
+    parser.add_argument("--interval", type=float, default=5)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--snapshot", action="store_true", help="Print one JSON snapshot for SSH polling; do not POST")
-    parser.add_argument("--metadata-only", action="store_true", help="Do not read conversation logs or send project paths")
+    privacy = parser.add_mutually_exclusive_group()
+    privacy.add_argument("--metadata-only", dest="metadata_only", action="store_true", default=True, help="Do not read conversation logs or send project paths (default)")
+    privacy.add_argument("--allow-logs", dest="metadata_only", action="store_false", help="Explicitly allow the legacy transcript-reading adapter")
     args = parser.parse_args()
     collector = Collector(args.codex_home, args.claude_home, args.server, metadata_only=args.metadata_only)
     if args.snapshot:
