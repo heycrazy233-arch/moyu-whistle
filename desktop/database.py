@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
+import json
+import time
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -22,6 +24,7 @@ class AgentStore:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS collectors (server TEXT PRIMARY KEY, received REAL NOT NULL, payload TEXT NOT NULL)")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -100,7 +103,19 @@ class AgentStore:
             rows = conn.execute(
                 "SELECT * FROM agent_snapshots ORDER BY server, project, session_id"
             ).fetchall()
-        return [dict(row) for row in rows]
+            collectors = conn.execute("SELECT * FROM collectors").fetchall()
+        result = [dict(row) for row in rows]
+        for collector in collectors:
+            for agent in json.loads(collector["payload"]):
+                agent["collector_online"] = time.time() - collector["received"] < 30
+                agent["received_at"] = collector["received"]
+                result.append(agent)
+        return result
+
+    def record_collector(self, server: str, agents: list) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute("INSERT INTO collectors VALUES (?, ?, ?) ON CONFLICT(server) DO UPDATE SET received=excluded.received, payload=excluded.payload",
+                         (server, time.time(), json.dumps(agents)))
 
     def list_events(self, limit: int = 50) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit), 500))

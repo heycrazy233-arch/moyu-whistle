@@ -4,8 +4,12 @@ Windows-first, offline-first status island for coding agents running across loca
 
 Agent Dock is the internal prototype name for the status center inside this project.
 
-This prototype focuses on the local desktop surface and a fake remote event sender. SSH tunnels,
-Claude Code hooks, Codex hooks, and tmux jump are intentionally left as the next integration layer.
+The browser dashboard can collect real local Codex and Claude Code session metadata.
+Remote collectors can connect through an SSH reverse tunnel. See
+[real agent setup and limitations](docs/real-agents.md).
+
+Start with `python3 desktop/server.py --collect` (Windows: `py desktop/server.py --collect`).
+Open http://127.0.0.1:17321/. This path requires only Python, not desktop dependencies.
 
 ## What Works Now
 

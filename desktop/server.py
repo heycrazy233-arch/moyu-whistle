@@ -3,6 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import sys
+import threading
+import time
+import socket
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -20,6 +25,34 @@ WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
 class ApiError(ValueError):
     pass
+
+
+def handle_collector(store, payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("server"), str) or not payload["server"]:
+        raise ApiError("server is required")
+    agents = payload.get("agents")
+    if not isinstance(agents, list) or len(agents) > 500:
+        raise ApiError("agents must be an array of at most 500 sessions")
+    cleaned = []
+    for agent in agents:
+        if not isinstance(agent, dict) or not agent.get("session_id"):
+            raise ApiError("session_id is required")
+        try:
+            event = AgentEvent.from_payload(dict(agent, server=payload["server"]))
+        except (TypeError, ValueError) as exc:
+            raise ApiError("Invalid agent event") from exc
+        row = event.to_dict()
+        row["agent_key"] = f"{event.server}:{event.agent_type}:{event.session_id}"
+        for key in ("evidence", "presence"):
+            row[key] = str(agent.get(key, "unknown"))[:100]
+        row["status_known"] = agent.get("status_known") is True
+        try:
+            row["last_activity"] = float(agent.get("last_activity", 0))
+        except (TypeError, ValueError) as exc:
+            raise ApiError("Invalid activity timestamp") from exc
+        cleaned.append(row)
+    store.record_collector(payload["server"], cleaned)
+    return {"ok": True, "count": len(cleaned)}
 
 
 def create_store(db_path: str | Path | None = None) -> AgentStore:
@@ -47,7 +80,7 @@ def create_fastapi_app(store: AgentStore):
     app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
 
     @app.get("/", include_in_schema=False)
-    def dashboard() -> FileResponse:
+    def dashboard():
         return FileResponse(WEB_DIR / "index.html")
 
     @app.get("/health")
@@ -66,6 +99,13 @@ def create_fastapi_app(store: AgentStore):
     def events_post(payload: dict[str, Any]) -> dict[str, Any]:
         try:
             return handle_event(store, payload)
+        except ApiError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/collectors")
+    def collectors_post(payload: dict[str, Any]):
+        try:
+            return handle_collector(store, payload)
         except ApiError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -122,13 +162,14 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:
-        if urlparse(self.path).path != "/api/events":
+        route = urlparse(self.path).path
+        if route not in {"/api/events", "/api/collectors"}:
             self._send_json(404, {"error": "Not found"})
             return
         length = int(self.headers.get("Content-Length") or "0")
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            result = handle_event(self.store, payload)
+            result = handle_collector(self.store, payload) if route == "/api/collectors" else handle_event(self.store, payload)
         except (json.JSONDecodeError, ApiError, ValueError) as exc:
             self._send_json(400, {"error": str(exc)})
             return
@@ -158,8 +199,26 @@ def main() -> None:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", default=DEFAULT_PORT, type=int)
     parser.add_argument("--db", default=str(DEFAULT_DB))
+    parser.add_argument("--collect", action="store_true", help="Collect this machine's real Codex and Claude sessions")
     args = parser.parse_args()
-    run_server(create_store(args.db), args.host, args.port)
+    store = create_store(args.db)
+    if args.collect:
+        sys.path.insert(0, str(WEB_DIR.parent / "remote"))
+        from collector import Collector
+        collector = Collector(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")),
+                              os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")),
+                              socket.gethostname())
+
+        def collect():
+            while True:
+                try:
+                    handle_collector(store, {"server": collector.server, "agents": collector.scan()})
+                except Exception as exc:
+                    print(f"Local collector failed: {type(exc).__name__}", flush=True)
+                time.sleep(3)
+
+        threading.Thread(target=collect, daemon=True).start()
+    run_server(store, args.host, args.port)
 
 
 if __name__ == "__main__":

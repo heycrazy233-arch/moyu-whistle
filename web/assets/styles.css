@@ -12,6 +12,8 @@
   --error: #ef6971;
   --done: #62a4ff;
   --idle: #8c96a3;
+  --unknown: #8c96a3;
+  --offline: #8c96a3;
 }
 
 * { box-sizing: border-box; }
@@ -48,7 +50,7 @@ h1 { margin-bottom: 0; font-size: 20px; letter-spacing: 0; }
 .overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(370px, .9fr); gap: 46px; padding: 38px 0 30px; }
 h2 { max-width: 680px; margin: 8px 0 10px; font-size: clamp(28px, 4vw, 44px); line-height: 1.08; letter-spacing: 0; }
 .lede { margin-bottom: 0; color: var(--muted); font-size: 15px; }
-.metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch; gap: 8px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(65px, 1fr)); align-items: stretch; gap: 8px; }
 .metric { min-height: 112px; padding: 14px 12px; border-top: 2px solid var(--status); background: var(--panel); }
 .metric-count { display: block; margin: 12px 0 3px; font-size: 28px; font-weight: 750; line-height: 1; }
 .metric-label { display: block; color: var(--muted); font-size: 11px; }
@@ -86,7 +88,7 @@ h2 { max-width: 680px; margin: 8px 0 10px; font-size: clamp(28px, 4vw, 44px); li
   .metric { min-height: 92px; padding: 10px 8px; }
   .agent-card { align-items: flex-start; flex-direction: column; gap: 14px; }
   .agent-meta { min-width: 0; justify-content: flex-start; text-align: left; }
-  .status { position: absolute; right: 20px; }
+  .status { align-self: flex-start; }
 }
 
 @media (max-width: 500px) {
@@ -94,7 +96,12 @@ h2 { max-width: 680px; margin: 8px 0 10px; font-size: clamp(28px, 4vw, 44px); li
   .metrics { grid-template-columns: repeat(3, 1fr); }
   .metric { min-height: 74px; }
   .metric-count { margin-top: 7px; font-size: 22px; }
-  .agent-card { position: relative; padding-right: 112px; }
+  .agent-card { position: relative; }
   .agent-meta { align-items: flex-start; flex-direction: column; gap: 3px; }
   .agent-meta span + span::before { display: none; }
 }
+
+.agent-main { flex: 1; max-width: 100%; }
+.agent-meta { flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
+.agent-name, .agent-message { white-space: normal; overflow-wrap: anywhere; }
+.status { flex-shrink: 0; }
