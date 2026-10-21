@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from state import AgentEvent, AgentStatus
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17321
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "work" / "agent-dock.sqlite3"
+WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
 
 class ApiError(ValueError):
@@ -36,10 +38,17 @@ def handle_event(store: AgentStore, payload: dict[str, Any]) -> dict[str, Any]:
 def create_fastapi_app(store: AgentStore):
     try:
         from fastapi import FastAPI, HTTPException
+        from fastapi.responses import FileResponse
+        from fastapi.staticfiles import StaticFiles
     except ModuleNotFoundError:
         return None
 
     app = FastAPI(title="Agent Dock", version="0.1.0")
+    app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    def dashboard() -> FileResponse:
+        return FileResponse(WEB_DIR / "index.html")
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -74,11 +83,32 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_file(self, path: Path) -> None:
+        try:
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(WEB_DIR.resolve())
+        except (FileNotFoundError, ValueError):
+            self._send_json(404, {"error": "Not found"})
+            return
+        body = resolved.read_bytes()
+        content_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, format: str, *args: Any) -> None:
         return
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path in {"/", "/index.html"}:
+            self._send_file(WEB_DIR / "index.html")
+            return
+        if parsed.path.startswith("/assets/"):
+            self._send_file(WEB_DIR / parsed.path.removeprefix("/"))
+            return
         if parsed.path == "/health":
             self._send_json(200, {"ok": True, "service": "agent-dock", "version": "0.1.0"})
             return

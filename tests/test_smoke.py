@@ -10,7 +10,7 @@ DESKTOP = ROOT / "desktop"
 if str(DESKTOP) not in sys.path:
     sys.path.insert(0, str(DESKTOP))
 
-from server import ApiError, create_store, handle_event
+from server import ApiError, WEB_DIR, create_store, handle_event
 
 
 class AgentDockSmokeTest(unittest.TestCase):
@@ -62,6 +62,11 @@ class AgentDockSmokeTest(unittest.TestCase):
             store = create_store(Path(temp_dir) / "agent-dock.sqlite3")
             with self.assertRaises(ApiError):
                 handle_event(store, {"event": "paused"})
+
+    def test_web_dashboard_assets_exist(self) -> None:
+        self.assertTrue((WEB_DIR / "index.html").is_file())
+        self.assertTrue((WEB_DIR / "assets" / "app.js").is_file())
+        self.assertTrue((WEB_DIR / "assets" / "styles.css").is_file())
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ Claude Code hooks, Codex hooks, and tmux jump are intentionally left as the next
 - SQLite event history
 - Five-state agent model: `idle`, `working`, `waiting`, `error`, `done`
 - Fake remote event sender
+- Browser dashboard at `http://127.0.0.1:17321/`
 - PySide6 desktop UI when PySide6 is installed
 - Console UI fallback when desktop dependencies are not installed
 
@@ -43,6 +44,14 @@ With only Python available:
 ```bash
 python3 desktop/launcher.py --console
 ```
+
+For the browser dashboard:
+
+```bash
+python3 desktop/server.py
+```
+
+Then open `http://127.0.0.1:17321/`.
 
 In another terminal:
 

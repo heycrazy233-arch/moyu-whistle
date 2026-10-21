@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101827">
+    <title>Agent Dock</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <p class="eyebrow">LOCAL CONTROL ROOM</p>
+            <h1>Agent Dock</h1>
+          </div>
+        </div>
+        <div class="connection" id="connection" aria-live="polite">
+          <span class="connection-dot"></span>
+          <span>Connecting</span>
+        </div>
+      </header>
+
+      <section class="overview" aria-label="Agent overview">
+        <div class="headline">
+          <p class="eyebrow">AGENT ACTIVITY</p>
+          <h2>One local view for every coding session.</h2>
+          <p class="lede" id="updated-at">Waiting for the local status service.</p>
+        </div>
+        <div class="metrics" id="metrics" aria-live="polite"></div>
+      </section>
+
+      <section class="agent-panel" aria-label="Agents">
+        <div class="panel-toolbar">
+          <div class="filters" id="filters" role="group" aria-label="Filter by status">
+            <button class="filter is-active" type="button" data-filter="all">All</button>
+            <button class="filter" type="button" data-filter="working">Working</button>
+            <button class="filter" type="button" data-filter="waiting">Waiting</button>
+            <button class="filter" type="button" data-filter="error">Error</button>
+            <button class="filter" type="button" data-filter="done">Done</button>
+          </div>
+          <button class="refresh" id="refresh" type="button" title="Refresh now" aria-label="Refresh now">
+            <span aria-hidden="true">↻</span>
+          </button>
+        </div>
+        <div class="agent-list" id="agent-list" aria-live="polite"></div>
+      </section>
+    </main>
+    <template id="empty-state">
+      <div class="empty-state">
+        <div class="empty-glyph" aria-hidden="true">+</div>
+        <h3>No agents yet</h3>
+        <p>Waiting for the first status event.</p>
+      </div>
+    </template>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
