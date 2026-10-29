@@ -60,7 +60,7 @@ class SettingsTests(unittest.TestCase):
 
     def test_validation_persistence_and_injection(self):
         value = copy.deepcopy(DEFAULT)
-        value['servers'] = [dict(name='research', host='user@host', port=2222, script='agent-dock-collector.py', enabled=False)]
+        value['servers'] = [dict(name='research', host='user@host', port=2222, script='moyu-whistle-collector.py', enabled=False)]
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'settings.json'
             Settings(path).save(value)

@@ -1,4 +1,4 @@
-"""Forward a remote loopback port to this computer's Agent Dock service."""
+"""Forward a remote loopback port to this computer's Moyu Whistle service."""
 import argparse
 import subprocess
 

@@ -4,7 +4,7 @@
 
 Open **设置 · 采集与 SSH** on the dashboard. Save applies to the running
 `desktop/server.py --collect` service. Preferences are local, beside the database
-as `work/agent-dock.settings.json` (ignored by Git).
+as `work/moyu-whistle.settings.json` (ignored by Git).
 
 - Automatic collection toggle; interval 5–3600 seconds, default 5.
 - Optional daily time window using the dashboard computer's system timezone;
@@ -23,12 +23,12 @@ establish normal host trust and key authentication, then copy the current script
 
 ```sh
 ssh -p 2222 user@your-server
-scp -P 2222 remote/collector.py user@your-server:agent-dock-collector.py
+scp -P 2222 remote/collector.py user@your-server:moyu-whistle-collector.py
 ```
 
 Set the profile host to `user@your-server`, port to `2222`, script to
-`agent-dock-collector.py`, enable it and save. Use the account that owns the agents.
-The remote host currently must have a POSIX shell and Python 3.9+.
+`moyu-whistle-collector.py`, enable it and save. Use the account that owns the agents.
+The remote host currently must have a POSIX shell and Python 3.11+.
 BatchMode forbids password prompts; StrictHostKeyChecking stays enabled.
 Each poll launches one SSH call and a one-shot collector, bounded by a 12-second
 timeout. Each source has a separate worker and cannot overlap its own polls.
@@ -84,7 +84,7 @@ before their first task. On Windows, Codex discovery requires a written session 
 Multiple rollouts for the same session are deduplicated by latest file modification time.
 
 Claude Code must provide `sessions/*.json` with pid, sessionId and status fields.
-This Mac's installed version does. Versions without those files need a future hook adapter;
+Some installations provide this format. Versions without those files need a future hook adapter;
 they are not silently inferred from transcript activity. Process checks are read-only.
 
 Unknown is used when a session is found without a recognized task state.
@@ -108,13 +108,13 @@ with `--remote-port` and use the matching URL below.
 Copy the standalone collector to that server (replace the destination):
 
 ```sh
-scp remote/collector.py user@your-server:agent-dock-collector.py
+scp remote/collector.py user@your-server:moyu-whistle-collector.py
 ```
 
 In your SSH session, run as the same remote user who runs the agents:
 
 ```sh
-python3 agent-dock-collector.py --server compute-a --url http://127.0.0.1:17322/api/collectors
+python3 moyu-whistle-collector.py --server compute-a --url http://127.0.0.1:17322/api/collectors
 ```
 
 Use a unique `--server` label for each machine/user. One collector per label;

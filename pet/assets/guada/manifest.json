@@ -1,0 +1,10 @@
+{
+  "name": "呱搭 · Guada",
+  "version": 1,
+  "states": {
+    "working": "working-cutout.png",
+    "idle": "idle.png",
+    "waiting": "waiting.gif",
+    "error": "error.gif"
+  }
+}

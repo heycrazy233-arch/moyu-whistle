@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 from time import time
 from typing import Any
+import math
 
 
 class AgentStatus(str, Enum):
@@ -24,7 +25,7 @@ STATUS_LABELS = {
 
 
 STATUS_COLORS = {
-    AgentStatus.IDLE: "#8c96a3",
+    AgentStatus.IDLE: "#60a5fa",
     AgentStatus.WORKING: "#1f9d55",
     AgentStatus.WAITING: "#c47f00",
     AgentStatus.ERROR: "#d83a3a",
@@ -46,8 +47,22 @@ class AgentEvent:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "AgentEvent":
+        if not isinstance(payload, dict):
+            raise ValueError("Event must be a JSON object")
+        for key in ("agent_type", "session_id", "server", "project", "cwd", "tmux_session", "message"):
+            value = payload.get(key)
+            if value is not None and (not isinstance(value, str) or len(value) > 4096):
+                raise ValueError(f"Invalid {key}")
         event = AgentStatus(str(payload.get("event", "")).lower())
-        timestamp = float(payload.get("timestamp") or time())
+        raw_timestamp = payload.get("timestamp")
+        if raw_timestamp is not None and (isinstance(raw_timestamp, bool) or not isinstance(raw_timestamp, (str, int, float))):
+            raise ValueError("Invalid timestamp")
+        try:
+            timestamp = time() if raw_timestamp is None else float(raw_timestamp)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid timestamp") from exc
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError("Invalid timestamp")
         return cls(
             event=event,
             agent_type=str(payload.get("agent_type") or "unknown"),

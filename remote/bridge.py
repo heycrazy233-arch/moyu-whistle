@@ -19,7 +19,7 @@ def send_event(url: str, payload: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Send one Agent Dock event.")
+    parser = argparse.ArgumentParser(description="Send one Moyu Whistle event.")
     parser.add_argument("--url", default="http://127.0.0.1:17321/api/events")
     parser.add_argument("--event", required=True, choices=["idle", "working", "waiting", "error", "done"])
     parser.add_argument("--agent-type", default="claude-code")

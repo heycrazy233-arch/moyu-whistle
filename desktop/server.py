@@ -8,6 +8,7 @@ import threading
 import time
 import socket
 import os
+import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -20,12 +21,20 @@ from settings import Settings, Monitor, in_window
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17321
-DEFAULT_DB = Path(__file__).resolve().parents[1] / "work" / "agent-dock.sqlite3"
+DEFAULT_DB = Path(__file__).resolve().parents[1] / "work" / "moyu-whistle.sqlite3"
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
 
 class ApiError(ValueError):
     pass
+
+
+def local_request_allowed(host, origin):
+    try:
+        return (urlparse("http://" + host).hostname in ("127.0.0.1", "localhost", "::1")
+                and (not origin or origin == "http://" + host))
+    except ValueError:
+        return False
 
 
 def handle_collector(store, payload):
@@ -47,10 +56,14 @@ def handle_collector(store, payload):
         for key in ("evidence", "presence"):
             row[key] = str(agent.get(key, "unknown"))[:100]
         row["status_known"] = agent.get("status_known") is True
+        client = agent.get("client_type")
+        row["client_type"] = client if event.agent_type == "codex" and client in ("desktop", "terminal", "vscode") else "unknown"
         try:
             row["last_activity"] = float(agent.get("last_activity", 0))
         except (TypeError, ValueError) as exc:
             raise ApiError("Invalid activity timestamp") from exc
+        if not math.isfinite(row["last_activity"]) or row["last_activity"] < 0:
+            raise ApiError("Invalid activity timestamp")
         cleaned.append(row)
     store.record_collector(payload["server"], cleaned)
     return {"ok": True, "count": len(cleaned)}
@@ -72,6 +85,9 @@ def dashboard_agents(store):
     sources = store.monitor.status()["sources"] if store.monitor else {}
     rows = store.list_agents()
     for row in rows:
+        # Keep legacy storage/input compatible; the live task view has four states.
+        if row["event"] == "done":
+            row.update(event="idle", status_label="Idle", status_color="#60a5fa")
         source = row["server"]
         profiles = {"ssh:" + p["name"]: p for p in config["servers"]}
         paused = not in_window(config) or (source.startswith("ssh:") and not profiles.get(source, {}).get("enabled"))
@@ -98,15 +114,26 @@ def create_fastapi_app(store: AgentStore):
     except ModuleNotFoundError:
         return None
 
-    app = FastAPI(title="Agent Dock", version="0.1.0")
+    app = FastAPI(title="Moyu Whistle", version="0.2.0-beta.1")
 
     @app.middleware("http")
     async def local_requests(request, call_next):
         from fastapi.responses import JSONResponse
         host = request.headers.get("host", "")
         origin = request.headers.get("origin")
-        if urlparse("http://" + host).hostname not in ("127.0.0.1", "localhost", "::1") or (origin and origin != "http://" + host):
+        if not local_request_allowed(host, origin):
             return JSONResponse({"error": "Local same-origin access only"}, status_code=403)
+        if request.method == "POST":
+            if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
+                return JSONResponse({"error": "JSON content type required"}, status_code=400)
+            size = 0
+            body = bytearray()
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > 1_000_000:
+                    return JSONResponse({"error": "Invalid request size"}, status_code=413)
+                body.extend(chunk)
+            request._body = bytes(body)
         return await call_next(request)
     app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
 
@@ -116,7 +143,7 @@ def create_fastapi_app(store: AgentStore):
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "service": "agent-dock", "version": "0.1.0"}
+        return {"ok": True, "service": "moyu-whistle", "version": "0.2.0-beta.1"}
 
     @app.get("/api/agents")
     def agents() -> list[dict[str, Any]]:
@@ -155,7 +182,7 @@ def create_fastapi_app(store: AgentStore):
     return app
 
 
-class AgentDockRequestHandler(BaseHTTPRequestHandler):
+class MoyuWhistleRequestHandler(BaseHTTPRequestHandler):
     store: AgentStore
 
     def _send_json(self, status: int, payload: Any) -> None:
@@ -170,7 +197,9 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
         try:
             resolved = path.resolve(strict=True)
             resolved.relative_to(WEB_DIR.resolve())
-        except (FileNotFoundError, ValueError):
+            if not resolved.is_file():
+                raise ValueError("Not a file")
+        except (OSError, ValueError):
             self._send_json(404, {"error": "Not found"})
             return
         body = resolved.read_bytes()
@@ -195,7 +224,7 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
             self._send_file(WEB_DIR / parsed.path.removeprefix("/"))
             return
         if parsed.path == "/health":
-            self._send_json(200, {"ok": True, "service": "agent-dock", "version": "0.1.0"})
+            self._send_json(200, {"ok": True, "service": "moyu-whistle", "version": "0.2.0-beta.1"})
             return
         if parsed.path == "/api/agents":
             self._send_json(200, dashboard_agents(self.store))
@@ -204,7 +233,11 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, settings_view(self.store))
             return
         if parsed.path == "/api/events":
-            limit = int(parse_qs(parsed.query).get("limit", ["50"])[0])
+            try:
+                limit = int(parse_qs(parsed.query).get("limit", ["50"])[0])
+            except ValueError:
+                self._send_json(400, {"error": "Invalid limit"})
+                return
             self._send_json(200, self.store.list_events(limit))
             return
         self._send_json(404, {"error": "Not found"})
@@ -228,7 +261,7 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
                 result = settings_view(self.store)
             else:
                 result = handle_collector(self.store, payload) if route == "/api/collectors" else handle_event(self.store, payload)
-        except (json.JSONDecodeError, ApiError, ValueError) as exc:
+        except (json.JSONDecodeError, ApiError, ValueError, TypeError) as exc:
             self._send_json(400, {"error": str(exc)})
             return
         self._send_json(200, result)
@@ -236,20 +269,22 @@ class AgentDockRequestHandler(BaseHTTPRequestHandler):
     def _local_request(self):
         host = self.headers.get("Host", "")
         origin = self.headers.get("Origin")
-        if urlparse("http://" + host).hostname not in ("localhost", "127.0.0.1", "::1") or (origin and origin != "http://" + host):
+        if not local_request_allowed(host, origin):
             self._send_json(403, {"error": "Local same-origin access only"})
             return False
         return True
 
 
 def run_stdlib_server(store: AgentStore, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
-    AgentDockRequestHandler.store = store
-    httpd = ThreadingHTTPServer((host, port), AgentDockRequestHandler)
-    print(f"Agent Dock API listening on http://{host}:{port}")
+    MoyuWhistleRequestHandler.store = store
+    httpd = ThreadingHTTPServer((host, port), MoyuWhistleRequestHandler)
+    print(f"Moyu Whistle API listening on http://{host}:{port}")
     httpd.serve_forever()
 
 
 def run_server(store: AgentStore, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
+    if host not in ("127.0.0.1", "localhost"):
+        raise ValueError("Only IPv4 loopback binding is supported; use SSH for remote collection")
     app = create_fastapi_app(store)
     if app is None:
         run_stdlib_server(store, host, port)
@@ -273,7 +308,7 @@ def main() -> None:
         from collector import Collector
         collector = Collector(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")),
                               os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")),
-                              socket.gethostname())
+                              store.local_source(socket.gethostname()))
 
         store.monitor = Monitor(store.settings, collector, store, handle_collector)
         store.monitor.start()

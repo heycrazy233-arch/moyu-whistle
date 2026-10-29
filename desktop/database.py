@@ -30,6 +30,7 @@ class AgentStore:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             conn.execute("CREATE TABLE IF NOT EXISTS collectors (server TEXT PRIMARY KEY, received REAL NOT NULL, payload TEXT NOT NULL)")
             conn.execute(
                 """
@@ -64,6 +65,12 @@ class AgentStore:
                 )
                 """
             )
+
+    def local_source(self, initial_name: str) -> str:
+        """Keep local identity stable across network-dependent hostname changes."""
+        with self._lock, self._connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO app_metadata VALUES ('local_source', ?)", (initial_name,))
+            return conn.execute("SELECT value FROM app_metadata WHERE key='local_source'").fetchone()[0]
 
     def record_event(self, event: AgentEvent) -> dict[str, Any]:
         row = event.to_dict()

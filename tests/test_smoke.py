@@ -13,10 +13,10 @@ if str(DESKTOP) not in sys.path:
 from server import ApiError, WEB_DIR, create_store, handle_event
 
 
-class AgentDockSmokeTest(unittest.TestCase):
+class MoyuWhistleSmokeTest(unittest.TestCase):
     def test_records_events_and_keeps_latest_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = create_store(Path(temp_dir) / "agent-dock.sqlite3")
+            store = create_store(Path(temp_dir) / "moyu-whistle.sqlite3")
 
             first = handle_event(
                 store,
@@ -59,7 +59,7 @@ class AgentDockSmokeTest(unittest.TestCase):
 
     def test_rejects_unknown_status(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = create_store(Path(temp_dir) / "agent-dock.sqlite3")
+            store = create_store(Path(temp_dir) / "moyu-whistle.sqlite3")
             with self.assertRaises(ApiError):
                 handle_event(store, {"event": "paused"})
 

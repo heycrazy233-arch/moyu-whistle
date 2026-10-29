@@ -3,7 +3,7 @@ const serverRows = document.querySelector('#ssh-servers');
 const settingsResult = document.querySelector('#settings-result');
 let loadedSettings = false;
 
-function addServer(profile = {name: '', host: '', port: 22, script: 'agent-dock-collector.py', enabled: false}) {
+function addServer(profile = {name: '', host: '', port: 22, script: 'moyu-whistle-collector.py', enabled: false}) {
   if (serverRows.children.length >= 8) return;
   const row = document.createElement('fieldset');
   row.className = 'ssh-row';

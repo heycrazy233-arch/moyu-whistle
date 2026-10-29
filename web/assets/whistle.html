@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>摸鱼哨 · 悬浮岛</title>
+  <link rel="stylesheet" href="/assets/whistle.css">
+</head>
+<body>
+  <main class="whistle">
+    <header>
+      <span class="mark" aria-hidden="true">▥</span>
+      <button id="toggle" aria-expanded="false" aria-controls="detail" title="单击展开/收起 · 长按拖动窗口">
+        <strong>摸鱼哨</strong><span id="summary">正在连接…</span>
+      </button>
+      <span id="signal" title="正在连接" aria-label="正在连接"></span>
+      <button id="quit" class="icon" aria-label="隐藏悬浮窗口" title="隐藏；可从菜单栏重新显示" hidden>×</button>
+    </header>
+    <section id="detail" hidden>
+      <div class="heading"><div><p class="eyebrow">YOUR CODING COMPANIONS</p><h1>会话动态</h1></div><a href="/" id="dashboard" target="_blank" rel="noopener">控制台 ↗</a></div>
+      <p id="connection" role="status">正在获取本地状态</p>
+      <nav aria-label="筛选会话"><button data-filter="all" aria-pressed="true">全部</button><button data-filter="working" aria-pressed="false">进行中</button><button data-filter="waiting" aria-pressed="false">等待</button><button data-filter="error" aria-pressed="false">错误</button><button data-filter="idle" aria-pressed="false">空闲</button></nav>
+      <div id="agents"></div>
+      <footer><span id="updated">尚未同步</span><button id="refresh">刷新</button></footer>
+    </section>
+  </main>
+  <aside id="waiting-notice" hidden role="alert"><strong>有 Agent 等待你的操作</strong><p id="waiting-message"></p><button id="waiting-open">查看等待会话</button><button id="waiting-dismiss">暂时忽略</button></aside>
+  <script src="/assets/whistle.js"></script>
+</body>
+</html>

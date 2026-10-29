@@ -28,10 +28,10 @@ def run_desktop_ui(store: AgentStore) -> int:
         QWidget,
     )
 
-    class AgentDockWindow(QMainWindow):
+    class MoyuWhistleWindow(QMainWindow):
         def __init__(self) -> None:
             super().__init__()
-            self.setWindowTitle("Agent Dock")
+            self.setWindowTitle("摸鱼哨")
             self.setMinimumSize(760, 480)
             root = QWidget()
             self.setCentralWidget(root)
@@ -39,7 +39,7 @@ def run_desktop_ui(store: AgentStore) -> int:
             self.layout.setContentsMargins(24, 20, 24, 20)
             self.layout.setSpacing(12)
 
-            title = QLabel("Agent Dock")
+            title = QLabel("摸鱼哨")
             title.setFont(QFont("Arial", 22, QFont.Weight.Bold))
             self.layout.addWidget(title)
 
@@ -72,7 +72,7 @@ def run_desktop_ui(store: AgentStore) -> int:
             self.clear_rows()
             agents = store.list_agents()
             if not agents:
-                empty = QLabel("No agents yet. Run fake_event_sender.py to simulate remote activity.")
+                empty = QLabel("No agents yet. Start a real agent and configure collection in the web dashboard.")
                 empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 empty.setMinimumHeight(180)
                 empty.setStyleSheet("color: #6b7280; border: 1px solid #d7dce2;")
@@ -122,6 +122,6 @@ def run_desktop_ui(store: AgentStore) -> int:
             return frame
 
     app = QApplication([])
-    window = AgentDockWindow()
+    window = MoyuWhistleWindow()
     window.show()
     return app.exec()
