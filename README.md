@@ -5,14 +5,15 @@
 本地优先的多 agent 状态面板：网页、可选悬浮窗口、SSH 远程采集。
 运行时不使用 AI 推断状态，不代替用户批准命令。
 
-**跨平台 Beta，尚未完成 Windows 实机验收，不是生产稳定版。**
+> **当前发布版仅完成 macOS 适配与本机验证。** Windows/Linux 相关代码与
+> CI 配置属于后续适配基础，不代表当前版本可在这些平台直接使用，也不是生产稳定版。
 
 ## 支持范围
 
 | 能力 | 当前情况 |
 | --- | --- |
 | macOS 网页、API、悬浮窗口 | 本机运行验证 |
-| Windows 网页与后端 | 跨平台代码、CI 配置；实机验收待完成 |
+| Windows 网页与后端 | 尚未适配完成；现有跨平台代码与 CI 配置仅供后续开发 |
 | Windows Codex 发现 | 需日志兼容模式，关闭识别尚不可靠 |
 | SSH Linux/macOS 远端 | 已实现，真实服务器端到端验收待完成 |
 | SSH Windows 远端 | 当前 POSIX 命令构造不支持 |
@@ -25,7 +26,7 @@
 
 需要 Python **3.11+**。下载 ZIP 解压或 clone 仓库。网页基础模式仅依赖标准库。
 
-Windows（在项目目录运行）：
+Windows（预览性开发入口，当前发布版不承诺可用）：
 
 ```powershell
 py -3 -m venv .venv
@@ -78,7 +79,7 @@ node floating/check-whistle.cjs
 python scripts/release_check.py
 ```
 
-CI 配置了三个系统的测试，但配置存在不等于远端运行通过。
+CI 配置了三个系统的测试，但配置存在不等于平台适配完成或远端运行通过。
 参见 [Windows Remark](docs/windows-remark.md)、[架构/API](docs/architecture.md)、
 [安全边界](SECURITY.md)、[贡献指南](CONTRIBUTING.md)、[发布检查](docs/release-checklist.md)。
 
