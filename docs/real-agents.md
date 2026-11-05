@@ -14,7 +14,8 @@ as `work/moyu-whistle.settings.json` (ignored by Git).
 - Metadata-only is the default. Codex writer locks and read-only session ID/source
   metadata identify open sessions; no transcript files or project paths are read.
   Task states remain Unknown for Codex in this mode. Claude session status is read.
-  Windows lacks writer-lock discovery, so metadata-only Codex discovery is not yet supported.
+  Windows has an unverified Win32 writer-lock probe; metadata-only discovery
+  remains unsupported for release purposes until real-machine validation passes.
 The explicit compatibility checkbox re-enables the older log adapter described below.
 
 Managed SSH profiles **pull snapshots through authenticated SSH**, so they require
@@ -80,7 +81,8 @@ Working means the last observed task event was task_started, not a claim of curr
 Subagent logs are excluded. Recent sessions (one hour) are included even after a terminal closes;
 the presence label and activity time distinguish them from confirmed open sessions.
 On macOS/Linux with lsof and ps, open Codex writer locks also discover CLI sessions
-before their first task. On Windows, Codex discovery requires a written session log.
+before their first task. Windows now probes sharing violations on the same lock
+files, but its behavior still requires real Codex desktop/terminal validation.
 Multiple rollouts for the same session are deduplicated by latest file modification time.
 
 Claude Code must provide `sessions/*.json` with pid, sessionId and status fields.

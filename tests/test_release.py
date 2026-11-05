@@ -15,6 +15,18 @@ from migrate_data import migrate
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_platform_layout_keeps_shared_core_and_compatibility_launchers(self):
+        for path in (
+            ROOT/'web/index.html', ROOT/'desktop/server.py', ROOT/'remote/collector.py',
+            ROOT/'platforms/common/README.md', ROOT/'platforms/macos/start.command',
+            ROOT/'platforms/windows/start.cmd', ROOT/'platforms/windows/doctor.ps1',
+        ):
+            self.assertTrue(path.is_file(), path)
+        self.assertIn('platforms\\windows\\start.cmd',
+                      (ROOT/'Start Moyu Whistle.cmd').read_text())
+        self.assertIn('platforms/macos/start.command',
+                      (ROOT/'Start Moyu Whistle.command').read_text())
+
     def test_bad_event_inputs_are_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = create_store(Path(tmp)/'test.db')

@@ -1,6 +1,7 @@
 # Windows Remark
 
-Windows 是 Beta 目标平台，未完成实机 agent/桌面完整验收。先运行
+Windows 是后续适配目标，当前发布版仅完成 macOS 验证，尚未完成 Windows
+实机 agent/桌面验收。平台入口和检查清单见 `platforms/windows/`。先运行
 `.venv\Scripts\python.exe start.py --doctor`，只显示版本与依赖，不输出私密路径。
 
 | 现象 | 检查 |
@@ -10,7 +11,7 @@ Windows 是 Beta 目标平台，未完成实机 agent/桌面完整验收。先�
 | PySide6 安装失败 | 检查 Python/CPU 架构是否有对应 wheel；先用网页模式 |
 | 网页无法连接 | 检查启动终端或 work/backend.log，netstat -ano 查看 17321 占用；不要杀未知 PID |
 | 防火墙提示 | 只绑定 127.0.0.1，不需公网入站；不要关闭安全软件 |
-| Codex 列表为空 | 最小模式尚无 Windows 锁文件发现能力；明确同意后启用日志兼容，检查 CODEX_HOME |
+| Codex 列表为空 | 已加入 Win32 writer-lock 探测但尚待实机验证；检查 CODEX_HOME，明确同意后启用日志兼容 |
 | 关闭会话仍显示 | 近期日志回退不证明进程仍在运行，关闭识别待完善 |
 | 人工审批漏报 | 同一环境 /hooks 检查 Active、Python 和脚本路径是否存在 |
 | 移动目录后失效 | 更新 Hook 绝对路径并重新审核；不要保留两份观察器 |

@@ -22,6 +22,16 @@
 
 详见 [已知问题](docs/known-issues.md)。缺少状态证据不代表 agent 空闲。
 
+## 代码与平台边界
+
+- `web/`、`desktop/`、`remote/`、`floating/`、`pet/` 是 macOS/Windows
+  共用核心；网页版、API、数据库和四态模型只有一套实现。
+- `platforms/macos/` 保存当前已验证的 macOS 启动入口。
+- `platforms/windows/` 保存 Windows 启动、诊断和实机验收清单。
+- 根目录启动文件仅作兼容转发，不再承载平台逻辑。
+
+完整归属见 [platforms/README.md](platforms/README.md)。
+
 ## 安装与启动
 
 需要 Python **3.11+**。下载 ZIP 解压或 clone 仓库。网页基础模式仅依赖标准库。

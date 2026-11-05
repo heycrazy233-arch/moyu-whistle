@@ -16,6 +16,13 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python -m pip install -r requirements-lock.txt
       - run: python -m unittest discover -s tests -v
+      - name: Validate Windows entry points
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./platforms/windows/doctor.ps1
+          & '.\Start Moyu Whistle.cmd' --doctor
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

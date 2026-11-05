@@ -10,12 +10,22 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "remote"))
 sys.path.insert(0, str(ROOT / "desktop"))
-from collector import LogReader, Collector, publish, codex_client
+from collector import LogReader, Collector, publish, codex_client, windows_open_codex_sessions
 from server import create_store, handle_collector, ApiError, MoyuWhistleRequestHandler, dashboard_agents
 from ssh_tunnel import command
 
 
 class CollectorTests(unittest.TestCase):
+    def test_windows_writer_lock_probe_ignores_stale_and_hidden_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            locks = root/'thread-writer-locks'
+            locks.mkdir()
+            for name in ('live.lock', 'stale.lock', '.internal.lock'):
+                (locks/name).touch()
+            opened = windows_open_codex_sessions(root, lambda path: path.name != 'stale.lock')
+            self.assertEqual(opened, {'live': 0})
+
     def test_async_question_does_not_block_or_prevent_idle(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'log.jsonl'

@@ -15,8 +15,9 @@
 
 ## 平台
 
-Windows 缺少 Codex writer-lock 发现，最小模式不能完整发现 Codex；
-日志模式会回退到近期会话，关闭识别不可靠。真实 Windows/SSH/原生窗口验收未完成。
+Windows 已加入基于 Win32 sharing violation 的 Codex writer-lock 发现，但尚未
+实机验证，不能据此宣称完整支持；日志模式仍可能回退到近期会话。真实
+Windows/SSH/原生窗口验收未完成。
 SSH 远端要求 POSIX shell，Windows PowerShell/CMD 未适配。
 Claude Code 依赖提供会话状态 JSON 的版本，不保证所有安装都可识别。
 

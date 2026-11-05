@@ -154,10 +154,48 @@ def process_alive(pid):
         return False
 
 
-def open_codex_sessions(home):
-    """lsof proves a writer holds the file; a leftover lock file does not."""
-    if os.name == "nt":
+def windows_file_locked(path):
+    """Return True only when Windows reports an active sharing/lock conflict."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                   wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                                   wintypes.HANDLE]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateFileW(str(path), 0x80000000, 0, None, 3, 0x80, None)
+    invalid = wintypes.HANDLE(-1).value
+    if handle == invalid:
+        return ctypes.get_last_error() in (32, 33)  # sharing/lock violation
+    kernel.CloseHandle(handle)
+    return False
+
+
+def windows_open_codex_sessions(home, locked=windows_file_locked):
+    """Find live Windows writer locks without reading conversation content."""
+    directory = Path(home) / "thread-writer-locks"
+    try:
+        paths = list(directory.glob("*.lock"))
+    except OSError:
         return None
+    sessions = {}
+    for path in paths:
+        try:
+            if locked(path) and not path.stem.startswith("."):
+                # Windows exposes the lock but not its owner PID through this API.
+                sessions[path.stem] = 0
+        except OSError:
+            continue
+    return sessions
+
+
+def open_codex_sessions(home):
+    """Use an OS lock probe; a leftover lock filename alone is not evidence."""
+    if os.name == "nt":
+        return windows_open_codex_sessions(home)
     try:
         result = subprocess.run(
             ["lsof", "-n", "-Fpn", "+D", str(home / "thread-writer-locks")],
@@ -318,9 +356,10 @@ class Collector:
                     sources = dict(conn.execute(f"SELECT id, source FROM threads WHERE id IN ({marks})", list(opened)))
             except sqlite3.Error:
                 pass
-        cli = {pid: is_cli(pid) for pid in set(opened.values())}
+        cli = {pid: is_cli(pid) for pid in set(opened.values()) if pid}
         for sid, pid in opened.items():
-            if sources.get(sid) not in ("cli", "vscode", "app-server") and not cli.get(pid):
+            if (os.name != "nt" and sources.get(sid) not in ("cli", "vscode", "app-server")
+                    and not cli.get(pid)):
                 continue
             agents.append(dict(session_id=sid, agent_type="codex", event="idle", status_known=False,
                                client_type=codex_client(cli_process=cli.get(pid, False)),
@@ -347,7 +386,7 @@ class Collector:
         agents = []
         observed = open_codex_sessions(self.codex_home)
         opened = observed or {}
-        cli_pids = {pid for pid in set(opened.values()) if is_cli(pid)}
+        cli_pids = {pid for pid in set(opened.values()) if pid and is_cli(pid)}
         cli_sessions = {sid for sid, pid in opened.items() if pid in cli_pids}
         matched = set()
         now = time.time()
@@ -373,13 +412,13 @@ class Collector:
                         presence="open" if sid in opened else "recent session")
             agents.append(data)
         for sid, pid in opened.items():
-            if sid in matched or sid not in cli_sessions:
+            if sid in matched or (sid not in cli_sessions and os.name != "nt"):
                 continue
             # Locks belonging to known internal subagents must not become fallback rows.
             if any(sid in p.name for p in self.reader.cache):
                 continue
-            agents.append(dict(session_id=sid, cwd=process_cwd(pid), agent_type="codex",
-                               client_type="terminal",
+            agents.append(dict(session_id=sid, cwd=process_cwd(pid) if pid else "", agent_type="codex",
+                               client_type="terminal" if sid in cli_sessions else "unknown",
                                event="idle", status_known=False, message="Open; no task event yet",
                                last_activity=0, evidence="writer lock", presence="open"))
         for path in (self.claude_home / "sessions").glob("*.json"):
